@@ -21,7 +21,7 @@ export const useVariantInfo = () => useContext(Context).variant;
 type CustomElementContext = Readonly<{
   config: Config;
   value: Value | null;
-  setValue: (newValue: Value) => void;
+  setValue: (newValue: Value | null) => void;
   isDisabled: boolean;
   environmentId: string;
   item: ItemInfo;
