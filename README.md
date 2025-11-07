@@ -39,6 +39,28 @@ You can define the shape of your configuration in the `src/customElement/config.
 
 In the same way you can define the shape of your value in the `src/customElement/value.ts` file along with a parsing function from a string. Usually, the most flexible format is json serialized into the string.
 
+### RestDB.io configuration
+
+This template expects the following JSON parameters when you register the custom element in Kontent.ai:
+
+```json
+{
+  "apiKey": "<your-restdb-api-key>",
+  "database": "analytics-779a",
+  "collection": "oil-meal",
+  "selectMode": "single",
+  "displayField": "name",
+  "valueField": "_id",
+  "query": "{ \"status\": \"published\" }"
+}
+```
+
+- `apiKey`, `database` and `collection` are required and point the element to your RestDB.io dataset.
+- `selectMode` accepts `single` or `multiple` to control whether editors may pick one entry or many.
+- `displayField` (optional) determines which field is shown as a label in the UI. It falls back to `name`, `title`, `label`, or the record id.
+- `valueField` (optional) specifies which field value is stored in Kontent.ai. It defaults to the RestDB.io record id (`_id`).
+- `query` (optional) applies a [RestDB.io Mongo-style query](https://restdb.io/docs/rest-api#section-querying) to narrow down the items returned by the element.
+
 ## Define your Element's height handling
 
 The width of the custom element is always the full width of the editing element in the Kontent.ai app. However, the height can be defined by the element itself.

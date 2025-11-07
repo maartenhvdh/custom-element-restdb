@@ -1,6 +1,10 @@
 export type Value = Readonly<{
-  valueKey: string;
+  selectedIds: ReadonlyArray<string>;
 }>;
+
+export const createValue = (ids: ReadonlyArray<string>): Value => ({
+  selectedIds: Array.from(new Set(ids)).filter(id => id.trim().length > 0),
+});
 
 export const parseValue = (input: string | null): Value | null | "invalidValue" => {
   if (input === null) {
@@ -10,12 +14,13 @@ export const parseValue = (input: string | null): Value | null | "invalidValue" 
   try {
     const parsedValue = JSON.parse(input);
 
-    return isValidValue(parsedValue) ? parsedValue : "invalidValue";
+    return isValidValue(parsedValue) ? createValue(parsedValue.selectedIds) : "invalidValue";
   }
   catch (e) {
     return "invalidValue";
   }
 };
 
-const isValidValue = (obj: Readonly<Record<string, unknown>>) =>
-  "valueKey" in obj;
+const isValidValue = (obj: unknown): obj is { selectedIds: ReadonlyArray<string> } =>
+  typeof obj === 'object' && obj !== null && Array.isArray((obj as { selectedIds?: unknown }).selectedIds) &&
+  (obj as { selectedIds: ReadonlyArray<unknown> }).selectedIds.every(id => typeof id === 'string');

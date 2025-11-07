@@ -1,58 +1,166 @@
-import { useState } from 'react';
-import { useConfig, useIsDisabled, useItemInfo, useEnvironmentId, useValue, useVariantInfo } from './customElement/CustomElementContext';
-import { promptToSelectAssets, promptToSelectItems, useElements } from './customElement/selectors';
+import { ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { useConfig, useIsDisabled, useValue } from './customElement/CustomElementContext';
+import { createValue } from './customElement/value';
+
+type RestDbRecord = Readonly<{ _id?: string }> & Readonly<Record<string, unknown>>;
+
+type FetchState = 'idle' | 'loading' | 'success' | 'error';
 
 export const IntegrationApp = () => {
-  const [selectedAssetNames, setSelectedAssetNames] = useState<ReadonlyArray<string>>([]);
-  const [selectedItemNames, setSelectedItemNames] = useState<ReadonlyArray<string>>([]);
-
-  // use this to access/modify this element's value
-  const [elementValue, setElementValue] = useValue();
-  // get whether this element should be disabled
-  const isDisabled = useIsDisabled();
-  // this custom element's configuration (defined in the content type in the Kontent.ai app)
   const config = useConfig();
-  const projectId = useEnvironmentId();
-  const item = useItemInfo();
-  const variant = useVariantInfo();
+  const isDisabled = useIsDisabled();
+  const [elementValue, setElementValue] = useValue();
 
-  // use this to get (updated) value of other elements in this item, the elements must be allowed in the content type (see https://kontent.ai/learn/docs/custom-elements)
-  const watchedElementsValues = useElements([config.textElementCodename]);
+  const [records, setRecords] = useState<ReadonlyArray<RestDbRecord>>([]);
+  const [fetchState, setFetchState] = useState<FetchState>('idle');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const selectAssets = () =>
-    // use this to prompt the user to select assets, the selected assets' details will be returned in the promise
-    promptToSelectAssets({ allowMultiple: true, fileType: "images" })
-      .then(assets => setSelectedAssetNames(assets?.map(asset => asset.name) ?? []));
+  useEffect(() => {
+    const controller = new AbortController();
 
-  const selectItems = () =>
-    // use this to prompt the user to select items, the selected items' details will be returned in the promise
-    promptToSelectItems({ allowMultiple: true })
-      .then(items => setSelectedItemNames(items?.map(item => item.name) ?? []));
+    const loadRecords = async () => {
+      setFetchState('loading');
+      setErrorMessage(null);
+
+      const baseUrl = `https://${config.database}.restdb.io/rest/${config.collection}`;
+      const querySuffix = config.query ? `?q=${encodeURIComponent(config.query)}` : '';
+
+      try {
+        const response = await fetch(`${baseUrl}${querySuffix}`, {
+          headers: {
+            'x-apikey': config.apiKey,
+            'cache-control': 'no-cache',
+          },
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Request failed with status ${response.status}`);
+        }
+
+        const payload = await response.json();
+
+        if (!Array.isArray(payload)) {
+          throw new Error('The RestDB.io response was not an array.');
+        }
+
+        setRecords(payload as ReadonlyArray<RestDbRecord>);
+        setFetchState('success');
+      }
+      catch (error) {
+        if (controller.signal.aborted) {
+          return;
+        }
+        setFetchState('error');
+        setErrorMessage(error instanceof Error ? error.message : 'Unknown error while fetching data.');
+      }
+    };
+
+    void loadRecords();
+
+    return () => controller.abort();
+  }, [config.apiKey, config.collection, config.database, config.query]);
+
+  const selectedIds = useMemo(() => elementValue?.selectedIds ?? [], [elementValue]);
+  const isMultiple = config.selectMode === 'multiple';
+
+  const getRecordValue = (record: RestDbRecord) => {
+    if (config.valueField && typeof record[config.valueField] !== 'undefined') {
+      return String(record[config.valueField]);
+    }
+    if (typeof record._id === 'string') {
+      return record._id;
+    }
+    return JSON.stringify(record);
+  };
+
+  const getRecordLabel = (record: RestDbRecord) => {
+    if (config.displayField && typeof record[config.displayField] !== 'undefined') {
+      return String(record[config.displayField]);
+    }
+    const fallbackField = ['name', 'title', 'label'].find(field => typeof record[field] === 'string');
+    if (fallbackField) {
+      return String(record[fallbackField]);
+    }
+    if (typeof record._id === 'string') {
+      return record._id;
+    }
+    return 'Unknown item';
+  };
+
+  const allOptions = useMemo(() => records.map(record => ({
+    value: getRecordValue(record),
+    label: getRecordLabel(record),
+  })), [records, config.displayField, config.valueField]);
+
+  const handleSingleChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    if (isDisabled) {
+      return;
+    }
+
+    const { value } = event.target;
+
+    if (!value) {
+      setElementValue(null);
+      return;
+    }
+
+    setElementValue(createValue([value]));
+  };
+
+  const handleMultipleChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    if (isDisabled) {
+      return;
+    }
+
+    const options = Array.from(event.target.selectedOptions).map(option => option.value).filter(Boolean);
+
+    setElementValue(options.length === 0 ? null : createValue(options));
+  };
+
+  const isLoading = fetchState === 'loading';
 
   return (
-    <div>
-      <h2>Build your custom element here.</h2>
-      <button onClick={selectAssets}>Select an asset</button>
-      <h2>Selected assets</h2>
-      <section>{selectedAssetNames.join(", ")}</section>
+    <div className="custom-element">
+      <header>
+        <h2>RestDB.io Selection</h2>
+        <p>Select {isMultiple ? 'one or more entries' : 'an entry'} from `{config.collection}`.</p>
+      </header>
 
-      <h2>Loaded data</h2>
-      <section>
-        {JSON.stringify({
-          selectedAssetNames,
-          selectedItemNames,
-          elementValue,
-          setElementValue,
-          isDisabled,
-          config,
-          projectId,
-          item,
-          variant,
-          watchedElementsValues,
-          selectAssets,
-          selectItems,
-        })}
+      {fetchState === 'error' && (
+        <div role="alert" style={{ color: 'red' }}>
+          {errorMessage ?? 'Unable to load data from RestDB.io.'}
+        </div>
+      )}
+
+      <label style={{ display: 'block', marginTop: '1rem' }}>
+        <span style={{ display: 'block', marginBottom: '.5rem', fontWeight: 600 }}>Entries</span>
+        <select
+          multiple={isMultiple}
+          disabled={isDisabled || isLoading || allOptions.length === 0}
+          value={isMultiple ? selectedIds : selectedIds[0] ?? ''}
+          onChange={isMultiple ? handleMultipleChange : handleSingleChange}
+          size={Math.min(Math.max(allOptions.length, isMultiple ? 4 : 1), 12)}
+          style={{ width: '100%', minHeight: '3rem' }}
+        >
+          {!isMultiple && <option value="">Select an option</option>}
+          {allOptions.map(option => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <section style={{ marginTop: '1rem' }}>
+        <strong>Current selection:</strong>
+        <pre style={{ whiteSpace: 'pre-wrap', background: '#f7f7f7', padding: '.75rem', borderRadius: '.5rem' }}>
+          {JSON.stringify(selectedIds, null, 2)}
+        </pre>
       </section>
+
+      {isLoading && <p>Loading data…</p>}
+      {!isLoading && allOptions.length === 0 && fetchState === 'success' && <p>No entries found.</p>}
     </div>
   );
 };
