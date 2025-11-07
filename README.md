@@ -1,166 +1,89 @@
-[![Contributors][contributors-shield]][contributors-url]
-[![Forks][forks-shield]][forks-url]
-[![Stargazers][stars-shield]][stars-url]
-[![Issues][issues-shield]][issues-url]
-[![MIT License][license-shield]][license-url]
+# Kontent.ai RestDB.io Custom Element
 
-[![Discord][discord-shield]][discord-url]
+This project delivers a ready-to-deploy custom element for [Kontent.ai](https://kontent.ai/) that lets editors pick entries from a [RestDB.io](https://restdb.io/) collection. It supports single or multi select, client-side searching, and saves the selected RestDB identifiers back into your Kontent.ai item.
 
+## Features
 
-# Kontent.ai React Custom Element Starter
+- Fetches RestDB.io records via API key, database, and collection configuration
+- Single or multiple selection modes with persisted selections
+- Inline search box to filter large datasets without a page reload
+- Graceful handling of disabled states, network errors, and empty results
+- Built with React, TypeScript, and Vite for fast local development and easy deployment
 
-This starter can be used to jumpstart your own custom element development with Kontent.ai. It contains all the necessary tools for creating a new [Custom Element](https://kontent.ai/learn/docs/custom-elements), a UI extension for content editors.
+## Quick Start
 
-You can inspire yourself by browsing already created integrations [**here**](https://github.com/topics/kontent-ai-integration).
+```bash
+npm ci
+npm run dev
+```
 
-If you wish to include your integration into the mentioned list, please add the **kontent-ai-integration** topic into your github integration repository. 
+Open the local preview URL that Vite prints in the terminal. Kontent.ai will load the same bundle when you deploy it.
 
-Additional Kontent.ai GitHub resources and tutorials can be found on [kontent-ai.github.io](https://kontent-ai.github.io/).
+## Configuration in Kontent.ai
 
-# Getting Started
-
-## Running the project
-
-The integration is created with [Vite](https://vitejs.dev/). 
-
-1. Install dependencies with `npm ci`.
-2. Run a local development server with `npm run dev`.
-3. To deploy the element you can use the output of running `npm run build` command that you can find in the `dist` folder.
-
-See [Vite guide](https://vitejs.dev/guide/#command-line-interface) for more available commands.
-
-## Define your Element's API
-
-There are two main things that you'll need to define.
-* What configuration will your custom element need. (This is provided in the configuration when adding the custom element into a content type)
-* What value will the custom element save. In what format (the value needs to be serialized into string).
-
-You can define the shape of your configuration in the `src/customElement/config.ts` file along with a validation function that will show the user an error when the provided configuration is not valid.
-
-In the same way you can define the shape of your value in the `src/customElement/value.ts` file along with a parsing function from a string. Usually, the most flexible format is json serialized into the string.
-
-### RestDB.io configuration
-
-This template expects the following JSON parameters when you register the custom element in Kontent.ai:
+When registering the custom element in Kontent.ai, provide the configuration JSON used by the component. Example:
 
 ```json
 {
   "apiKey": "<your-restdb-api-key>",
   "database": "analytics-779a",
   "collection": "oil-meal",
-  "selectMode": "single",
+  "selectMode": "multiple",
   "displayField": "name",
   "valueField": "_id",
   "query": "{ \"status\": \"published\" }"
 }
 ```
 
-- `apiKey`, `database` and `collection` are required and point the element to your RestDB.io dataset.
-- `selectMode` accepts `single` or `multiple` to control whether editors may pick one entry or many.
-- `displayField` (optional) determines which field is shown as a label in the UI. It falls back to `name`, `title`, `label`, or the record id.
-- `valueField` (optional) specifies which field value is stored in Kontent.ai. It defaults to the RestDB.io record id (`_id`).
-- `query` (optional) applies a [RestDB.io Mongo-style query](https://restdb.io/docs/rest-api#section-querying) to narrow down the items returned by the element.
+- `apiKey`, `database`, `collection`: required connection details for RestDB.io.
+- `selectMode`: `single` or `multiple` to control editor selections.
+- `displayField` (optional): field shown in the dropdown. Falls back to `name`, `title`, `label`, or `_id`.
+- `valueField` (optional): field saved in Kontent.ai. Defaults to the RestDB `_id`.
+- `query` (optional): RestDB Mongo-style filter to reduce the dataset.
 
-## Define your Element's height handling
+## Value Stored in Kontent.ai
 
-The width of the custom element is always the full width of the editing element in the Kontent.ai app. However, the height can be defined by the element itself.
-In the `src/main.tsx` file you can find the usage of the `CustomElementContext` where you can define the height of your element.
-It can either be a specific size in pixels, `"default"` to use the default value or `"dynamic"` to resize the element based on the height of the element's body element.
+The element stores a JSON object containing the selected IDs:
 
-## Write your Element
-
-You can start building the element in the `src/IntegrationApp.tsx` file where you can find example usage of several utilities defined in this repository that might come in useful.
-
-## Utilities in this repository
-
-### useConfig
-
-Use this hook to get the configuration provided for this custom element.
-The configuration will be valid based on the validation function you defined in `src/customElement/config.ts` and will be of the `Config` type also defined in the file.
-
-### useValue
-
-Use this hook to get the current value of the element and a function to update the value.
-The value will be parsed using the function defined in `src/customElement/value.ts` and will be of the `Value` type also defined in the file.
-Example:
-```ts
-const [value, setValue] = useValue();
+```json
+{
+  "selectedIds": ["67890", "12345"]
+}
 ```
 
-### useIsDisabled
+When editors clear the selection the value becomes `null`.
 
-This hook indicates whether your element should appear disabled. (e.g. when the item is published or the user doesn't have permission to modify the item)
-It subscribes to changes so the returned value will always be up-to-date.
+## Local Development
 
-### useEnvironmentId
+- `npm run dev`: start Vite with hot module replacement.
+- `npm run build`: type-check with TypeScript and build the production bundle into `dist`.
+- `npm run preview`: serve the built bundle locally.
 
-Returns the environment id of this element's content item.
+The project uses `CustomElementContext` to read configuration and manage value updates. `IntegrationApp.tsx` contains the UI logic for fetching RestDB.io data, searching, and presenting the dropdown.
 
-### useItemInfo
+## Deployment
 
-Gets information about the element's content item. 
-See the `ItemDetail` type in the `src/customElement/types/customElement.d.ts` file for details of available item information.
+The build output in `dist` is static and can be hosted on any CDN. To deploy on [Vercel](https://vercel.com/):
 
-### useVariantInfo
+1. Push the repository to GitHub/GitLab/Bitbucket.
+2. Import the project in Vercel and choose the **Vite** framework preset.
+3. Keep the default build command (`npm run build`) and output directory (`dist`).
+4. Deploy. Use the generated URL as the custom element host in Kontent.ai.
 
-Gets the element's language id and codename.
+If you later want to hide the RestDB API key, move the fetch logic into a Vercel Edge/Serverless function and set the key as an environment variable there.
 
-### useElements
+## Project Structure Highlights
 
-Use this hook to get values of the specified elements (accepts element codenames). 
-The hook subscribes to element changes so the returned values will always be up-to-date.
+- `src/IntegrationApp.tsx`: Main UI logic including RestDB fetch, search, and selection handling.
+- `src/customElement/config.ts`: Defines and validates the configuration schema passed from Kontent.ai.
+- `src/customElement/value.ts`: Serializes and parses the stored selection.
+- `src/customElement/CustomElementContext.tsx`: Bridges the Kontent.ai Custom Element API with React.
 
-### promptToSelectItems
+## Resources
 
-Use this function to prompt the user to select content items.
-You can specify whether they should select only one or several.
-The function returns details of the selected items.
+- Kontent.ai Custom Elements documentation: https://kontent.ai/learn/docs/custom-elements
+- RestDB.io REST API guide: https://restdb.io/docs/rest-api
 
-### promptToSelectAssets
+## License
 
-Use this function to prompt the user to select assets.
-You can specify whether they should select only one or several and whether they should only select images or any asset.
-The function returns details of the selected assets.
-
-# Structure of the Custom Element
-
-## Static resources in the `index.html` file
-
-Every Kontent.ai custom element needs the [Custom Element API](https://kontent.ai/learn/reference/custom-elements-js-api/) to work properly.
-This custom element is no exception and you can find it linked in the `index.html` template in the root of the repository.
-
-Additionally, you can find there linked a CSS file from the `public` folder.
-This contains Kontent.ai styling that you can leverage to make your custom element look similar to the rest of the Kontent.ai app.
-It also includes Kontent.ai font.
-
-## `CustomElementContext`
-
-This is the core of the connection to the Custom Element API.
-You can find here the call to the `CustomElement.init` function that initializes the custom element and populates the React context with useful information like the element's value, config and so on.
-It also handles handles height of the custom element using the supplied prop `height`.
-
-## `selectors.ts`
-
-Here you can find the implementation of most of the wrappers around the Custom Element API.
-
-# Contributing
-
-For Contributing please see  [`CONTRIBUTING.md`](CONTRIBUTING.md) for more information.
-
-# License
-
-Distributed under the MIT License. See [`LICENSE.md`](./LICENSE.md) for more information.
-
-
-[contributors-shield]: https://img.shields.io/github/contributors/kontent-ai/custom-element-starter-react.svg?style=for-the-badge
-[contributors-url]: https://github.com/kontent-ai/custom-element-starter-react/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/kontent-ai/custom-element-starter-react.svg?style=for-the-badge
-[forks-url]: https://github.com/kontent-ai/custom-element-starter-react/network/members
-[stars-shield]: https://img.shields.io/github/stars/kontent-ai/custom-element-starter-react.svg?style=for-the-badge
-[stars-url]: https://github.com/kontent-ai/custom-element-starter-react/stargazers
-[issues-shield]: https://img.shields.io/github/issues/kontent-ai/custom-element-starter-react.svg?style=for-the-badge
-[issues-url]:https://github.com/kontent-ai/custom-element-starter-react/issues
-[license-shield]: https://img.shields.io/github/license/kontent-ai/custom-element-starter-react.svg?style=for-the-badge
-[license-url]:https://github.com/kontent-ai/custom-element-starter-react/blob/master/LICENSE.md
-[discord-shield]: https://img.shields.io/discord/821885171984891914?color=%237289DA&label=Kontent.ai%20Discord&logo=discord&style=for-the-badge
-[discord-url]: https://discord.com/invite/SKCxwPtevJ
+Distributed under the MIT License. See [`LICENSE.md`](./LICENSE.md) for details.

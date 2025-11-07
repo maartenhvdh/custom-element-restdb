@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useConfig, useIsDisabled, useValue } from './customElement/CustomElementContext';
 import { createValue } from './customElement/value';
 
@@ -15,6 +15,7 @@ export const IntegrationApp = () => {
   const [fetchState, setFetchState] = useState<FetchState>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -125,32 +126,78 @@ export const IntegrationApp = () => {
     return Array.from(merged.values());
   }, [allOptions, normalizedSearch, isMultiple, selectedIds]);
 
-  const handleSingleChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    if (isDisabled) {
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isDropdownOpen) {
       return;
     }
 
-    const { value } = event.target;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isDropdownOpen]);
+
+  useEffect(() => {
+    if (!isDropdownOpen) {
+      setSearchTerm('');
+    }
+  }, [isDropdownOpen]);
+
+  useEffect(() => {
+    if (isDisabled) {
+      setIsDropdownOpen(false);
+    }
+  }, [isDisabled]);
+
+  const handleSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(event.target.value);
+  };
+
+  const clearSelection = () => {
+    setElementValue(null);
+    setIsDropdownOpen(false);
+  };
+
+  const selectSingleValue = (value: string | null) => {
+    if (isDisabled) {
+      return;
+    }
 
     if (!value) {
       setElementValue(null);
-      return;
+    } else {
+      setElementValue(createValue([value]));
     }
 
-    setElementValue(createValue([value]));
+    setIsDropdownOpen(false);
   };
 
-  const handleMultipleChange = (event: ChangeEvent<HTMLSelectElement>) => {
+  const toggleMultiValue = (value: string) => {
     if (isDisabled) {
       return;
     }
 
-    const options = Array.from(event.target.selectedOptions).map(option => option.value).filter(Boolean);
+    const isAlreadySelected = selectedIds.includes(value);
+    const nextValues = isAlreadySelected ? selectedIds.filter(id => id !== value) : [...selectedIds, value];
 
-    setElementValue(options.length === 0 ? null : createValue(options));
+    setElementValue(nextValues.length === 0 ? null : createValue(nextValues));
   };
 
   const isLoading = fetchState === 'loading';
+  const isDropdownDisabled = isDisabled || isLoading || fetchState === 'error';
+  const selectedOptionDetails = useMemo(() => selectedIds.map(id => {
+    const option = allOptions.find(item => item.value === id);
+    return option ?? { value: id, label: id };
+  }), [selectedIds, allOptions]);
 
   return (
     <div className="custom-element">
@@ -165,48 +212,177 @@ export const IntegrationApp = () => {
         </div>
       )}
 
-      <label style={{ display: 'block', marginTop: '1rem' }}>
-        <span style={{ display: 'block', marginBottom: '.5rem', fontWeight: 600 }}>Search</span>
-        <input
-          type="search"
-          value={searchTerm}
-          onChange={event => setSearchTerm(event.target.value)}
-          placeholder="Type to filter results"
-          disabled={isDisabled || fetchState !== 'success'}
-          style={{ width: '100%', padding: '.5rem', borderRadius: '.5rem', border: '1px solid #d1d5db' }}
-        />
-      </label>
+      <section style={{ marginTop: '1rem' }}>
+        <div ref={dropdownRef} style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
+          <button
+            type="button"
+            onClick={() => {
+              if (!isDropdownDisabled) {
+                setIsDropdownOpen(prev => !prev);
+              }
+            }}
+            disabled={isDropdownDisabled}
+            style={{
+              width: '100%',
+              padding: '.75rem',
+              borderRadius: '.5rem',
+              border: '1px solid #d1d5db',
+              background: isDropdownDisabled ? '#f3f4f6' : '#fff',
+              cursor: isDropdownDisabled ? 'not-allowed' : 'pointer',
+              textAlign: 'left',
+            }}
+          >
+            {isMultiple
+              ? `${selectedIds.length} selected`
+              : selectedOptionDetails[0]?.label ?? 'Select an option'}
+          </button>
 
-      <label style={{ display: 'block', marginTop: '1rem' }}>
-        <span style={{ display: 'block', marginBottom: '.5rem', fontWeight: 600 }}>Entries</span>
-        <select
-          multiple={isMultiple}
-          disabled={isDisabled || isLoading || filteredOptions.length === 0}
-          value={isMultiple ? selectedIds : selectedIds[0] ?? ''}
-          onChange={isMultiple ? handleMultipleChange : handleSingleChange}
-          size={Math.min(Math.max(filteredOptions.length, isMultiple ? 4 : 1), 12)}
-          style={{ width: '100%', minHeight: '3rem' }}
-        >
-          {!isMultiple && <option value="">Select an option</option>}
-          {filteredOptions.map(option => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
+          {isDropdownOpen && (
+            <div
+              style={{
+                position: 'absolute',
+                zIndex: 10,
+                width: '100%',
+                marginTop: '.5rem',
+                borderRadius: '.75rem',
+                boxShadow: '0 10px 25px rgba(15, 23, 42, 0.15)',
+                background: '#fff',
+                border: '1px solid #e5e7eb',
+              }}
+            >
+              <div style={{ padding: '.75rem', borderBottom: '1px solid #e5e7eb' }}>
+                <input
+                  type="search"
+                  value={searchTerm}
+                  onChange={handleSearchChange}
+                  placeholder="Type to filter results"
+                  autoFocus
+                  style={{
+                    width: '100%',
+                    padding: '.5rem .75rem',
+                    borderRadius: '.5rem',
+                    border: '1px solid #d1d5db',
+                  }}
+                />
+              </div>
+
+              <div style={{ maxHeight: '16rem', overflowY: 'auto' }}>
+                {fetchState === 'loading' && (
+                  <p style={{ padding: '1rem', color: '#6b7280' }}>Loading…</p>
+                )}
+
+                {fetchState === 'success' && filteredOptions.length === 0 && (
+                  <p style={{ padding: '1rem', color: '#6b7280' }}>No entries match your search.</p>
+                )}
+
+                {filteredOptions.map(option => (
+                  <div
+                    key={option.value}
+                    style={{
+                      padding: '.75rem 1rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '.75rem',
+                      borderBottom: '1px solid #f3f4f6',
+                    }}
+                  >
+                    {isMultiple ? (
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '.75rem', width: '100%' }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(option.value)}
+                          onChange={() => toggleMultiValue(option.value)}
+                        />
+                        <span style={{ flexGrow: 1 }}>{option.label}</span>
+                        <code style={{ background: '#f3f4f6', padding: '.25rem .5rem', borderRadius: '.5rem' }}>{option.value}</code>
+                      </label>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => selectSingleValue(option.value)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          width: '100%',
+                          background: 'transparent',
+                          border: 'none',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <span>{option.label}</span>
+                        <code style={{ background: '#f3f4f6', padding: '.25rem .5rem', borderRadius: '.5rem' }}>{option.value}</code>
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ padding: '.75rem', display: 'flex', justifyContent: 'space-between', gap: '.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsDropdownOpen(false)}
+                  style={{
+                    padding: '.5rem .75rem',
+                    borderRadius: '.5rem',
+                    border: '1px solid #d1d5db',
+                    background: '#fff',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Close
+                </button>
+                {selectedIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={clearSelection}
+                    style={{
+                      padding: '.5rem .75rem',
+                      borderRadius: '.5rem',
+                      border: '1px solid transparent',
+                      background: '#2563eb',
+                      color: '#fff',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Clear selection
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
 
       <section style={{ marginTop: '1rem' }}>
         <strong>Current selection:</strong>
-        <pre style={{ whiteSpace: 'pre-wrap', background: '#f7f7f7', padding: '.75rem', borderRadius: '.5rem' }}>
-          {JSON.stringify(selectedIds, null, 2)}
-        </pre>
+        {selectedOptionDetails.length === 0 ? (
+          <p style={{ color: '#6b7280', marginTop: '.5rem' }}>No entries selected.</p>
+        ) : (
+          <ul style={{ listStyle: 'none', padding: 0, margin: '.75rem 0 0 0', display: 'grid', gap: '.5rem' }}>
+            {selectedOptionDetails.map(option => (
+              <li
+                key={option.value}
+                style={{
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '.5rem',
+                  padding: '.75rem',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: '.75rem',
+                }}
+              >
+                <span>{option.label}</span>
+                <code style={{ background: '#f3f4f6', padding: '.25rem .5rem', borderRadius: '.5rem' }}>{option.value}</code>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       {isLoading && <p>Loading data…</p>}
-      {!isLoading && filteredOptions.length === 0 && fetchState === 'success' && (
-        <p>No entries match your search.</p>
-      )}
     </div>
   );
 };
