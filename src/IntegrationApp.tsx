@@ -243,11 +243,15 @@ export const IntegrationApp = () => {
                 position: 'absolute',
                 zIndex: 10,
                 width: '100%',
+                maxHeight: '24rem',
+                display: 'flex',
+                flexDirection: 'column',
                 marginTop: '.5rem',
                 borderRadius: '.75rem',
                 boxShadow: '0 10px 25px rgba(15, 23, 42, 0.15)',
                 background: '#fff',
                 border: '1px solid #e5e7eb',
+                overflow: 'hidden',
               }}
             >
               <div style={{ padding: '.75rem', borderBottom: '1px solid #e5e7eb' }}>
@@ -266,7 +270,7 @@ export const IntegrationApp = () => {
                 />
               </div>
 
-              <div style={{ maxHeight: '16rem', overflowY: 'auto' }}>
+              <div style={{ maxHeight: '16rem', overflowY: 'auto', flex: '1 1 auto', overscrollBehavior: 'contain' }}>
                 {fetchState === 'loading' && (
                   <p style={{ padding: '1rem', color: '#6b7280' }}>Loading…</p>
                 )}
@@ -319,7 +323,7 @@ export const IntegrationApp = () => {
                 ))}
               </div>
 
-              <div style={{ padding: '.75rem', display: 'flex', justifyContent: 'space-between', gap: '.5rem' }}>
+              <div style={{ padding: '.75rem', display: 'flex', justifyContent: 'space-between', gap: '.5rem', flexShrink: 0, borderTop: '1px solid #e5e7eb', background: '#f9fafb' }}>
                 <button
                   type="button"
                   onClick={() => setIsDropdownOpen(false)}
