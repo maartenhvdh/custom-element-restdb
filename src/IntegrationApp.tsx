@@ -14,6 +14,7 @@ export const IntegrationApp = () => {
   const [records, setRecords] = useState<ReadonlyArray<RestDbRecord>>([]);
   const [fetchState, setFetchState] = useState<FetchState>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -93,6 +94,37 @@ export const IntegrationApp = () => {
     label: getRecordLabel(record),
   })), [records, config.displayField, config.valueField]);
 
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const filteredOptions = useMemo(() => {
+    if (!normalizedSearch) {
+      return allOptions;
+    }
+
+    const matches = allOptions.filter(option =>
+      option.label.toLowerCase().includes(normalizedSearch) || option.value.toLowerCase().includes(normalizedSearch)
+    );
+
+    if (!isMultiple) {
+      return matches;
+    }
+
+    const selectedOptionValues = new Set(selectedIds);
+    const merged = new Map<string, typeof allOptions[number]>();
+
+    const ensureUnique = (option: typeof allOptions[number]) => {
+      if (!merged.has(option.value)) {
+        merged.set(option.value, option);
+      }
+    };
+
+    allOptions
+      .filter(option => selectedOptionValues.has(option.value))
+      .forEach(ensureUnique);
+    matches.forEach(ensureUnique);
+
+    return Array.from(merged.values());
+  }, [allOptions, normalizedSearch, isMultiple, selectedIds]);
+
   const handleSingleChange = (event: ChangeEvent<HTMLSelectElement>) => {
     if (isDisabled) {
       return;
@@ -134,17 +166,29 @@ export const IntegrationApp = () => {
       )}
 
       <label style={{ display: 'block', marginTop: '1rem' }}>
+        <span style={{ display: 'block', marginBottom: '.5rem', fontWeight: 600 }}>Search</span>
+        <input
+          type="search"
+          value={searchTerm}
+          onChange={event => setSearchTerm(event.target.value)}
+          placeholder="Type to filter results"
+          disabled={isDisabled || fetchState !== 'success'}
+          style={{ width: '100%', padding: '.5rem', borderRadius: '.5rem', border: '1px solid #d1d5db' }}
+        />
+      </label>
+
+      <label style={{ display: 'block', marginTop: '1rem' }}>
         <span style={{ display: 'block', marginBottom: '.5rem', fontWeight: 600 }}>Entries</span>
         <select
           multiple={isMultiple}
-          disabled={isDisabled || isLoading || allOptions.length === 0}
+          disabled={isDisabled || isLoading || filteredOptions.length === 0}
           value={isMultiple ? selectedIds : selectedIds[0] ?? ''}
           onChange={isMultiple ? handleMultipleChange : handleSingleChange}
-          size={Math.min(Math.max(allOptions.length, isMultiple ? 4 : 1), 12)}
+          size={Math.min(Math.max(filteredOptions.length, isMultiple ? 4 : 1), 12)}
           style={{ width: '100%', minHeight: '3rem' }}
         >
           {!isMultiple && <option value="">Select an option</option>}
-          {allOptions.map(option => (
+          {filteredOptions.map(option => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
@@ -160,7 +204,9 @@ export const IntegrationApp = () => {
       </section>
 
       {isLoading && <p>Loading data…</p>}
-      {!isLoading && allOptions.length === 0 && fetchState === 'success' && <p>No entries found.</p>}
+      {!isLoading && filteredOptions.length === 0 && fetchState === 'success' && (
+        <p>No entries match your search.</p>
+      )}
     </div>
   );
 };
